@@ -63,8 +63,55 @@ def fhpd(square):
     return d
             
 
+#Returns amount of nearby enemies
 
-        
+def ne(square):
+    total = 0
+    for direction, neighbor in enumerate(game_map.neighbors(square)):
+        for direction1, neighbor1 in enumerate(game_map.neighbors(neighbor)):
+            if neighbor1.owner != myID and neighbor1.owner != 0:
+                total += 1
+        if neighbor.owner != myID and neighbor.owner != 0:
+            total += 1
+
+    return total
+
+
+#Returns the strength of nearby enemies.
+def nes(square):
+    total = 0
+    for direction, neighbor in enumerate(game_map.neighbors(square)):
+        for direction1, neighbor1 in enumerate(game_map.neighbors(neighbor)):
+            if neighbor1.owner != myID and neighbor1.owner != 0:
+                total += neighbor1.strength
+        if neighbor.owner != myID and neighbor.owner != 0:
+            total += neighbor.strength
+
+    return total
+
+#Returns true if in deep territory, i.e. 2 layers of friendlies around it.
+def dt(square):
+    deep = True
+    for direction, neighbor in enumerate(game_map.neighbors(square)):
+        for direction1, neighbor1 in enumerate(game_map.neighbors(neighbor)):
+            if neighbor1.owner != myID:
+                deep = False
+        if neighbor.owner != myID:
+            deep = False
+
+    return False
+
+#Returns strength of nearby friendlies
+def nfs(square):
+    total = square.strength
+    for direction, neighbor in enumerate(game_map.neighbors(square)):
+        for direction1, neighbor1 in enumerate(game_map.neighbors(neighbor)):
+            if neighbor1.owner == myID:
+                total += neighbor1.strength
+        if neighbor.owner == myID:
+            total += neighbor.strength
+
+    return total
         
 #Get the weakest enemy (called when not surrounded by own territory preferably)
 #Return still when not surrounded by  (takable) enemy
@@ -184,8 +231,18 @@ def fhp(square):
     
 def assign_move(square):
 
+    #Move away from stronger enemies, and move towards weaker enemies. 
+    if fne(square) != 12 and ne(square) > 3:
+        #If weak, remain still
+        if square.strength < square.production * 5:
+            return Move(square, STILL)
+        if nfs(square) < nes(square):
+            return Move(square, hlt.opposite_cardinal(fne(square)))
+        else:
+            return Move(square, fne(square))
+
     #If it is being attacked, i.e. has many enemies nearby, just attack
-    if enemies > 30 and square.strength > square.production * 5:
+    if ne(square) > 4 and square.strength > square.production * 5:
         if fne(square) == 12:
             return Move(square, fnb(square))
         else:
@@ -216,7 +273,7 @@ def assign_move(square):
 ##            return Move(square, direction)
         
         #If it is next to a friendly neighbour and they are both relatively weak, try merge
-        if neighbor.owner == myID and (square.strength < 80 and square.strength > 10) and (neighbor.strength < 80 and neighbor.strength > square.production):
+        if neighbor.owner == myID and (square.strength < 50 and square.strength > 10) and (neighbor.strength < 50 and neighbor.strength > square.production):
             #remain still if the production is higher
             #make sure they do not waste too much:
             if neighbor.strength + square.strength >= 280:
@@ -241,6 +298,7 @@ def assign_move(square):
             return Move(square, fnb(square))
         else:
             return Move(square, fne(square))
+        
 
 
     #If it is surrounded by weak neighbors of its own type, then stay still
@@ -254,7 +312,7 @@ def assign_move(square):
     
     #If low on territory and has medium strength, just go to nearest border (assuming it can take it)
     if territory < 30 and square.strength > square.production * 5:
-        return Move(square, fwe(square))
+        return Move(square, fne(square))
 
     
     #If it is next to an enemy, take the weakest enemy
@@ -267,10 +325,11 @@ def assign_move(square):
 
     #If the square is weak, stay still
     return Move(square, STILL)
-
+frame = 0
 territory = 0
 enemies = 0
 while True:
+    frame += 1
     enemies = 0
     f.write("TEST")
     game_map.get_frame()
