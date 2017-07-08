@@ -9,6 +9,8 @@ f = open("debug.txt", "w")
 myID, game_map = hlt.get_init()
 hlt.send_init("Tony's Bot")
 
+
+
 #This functions finds the direction with the highest production
 #It will average the production in a triangle in each given direction, and then return the direction with the heighest.
 def fhpd(square):
@@ -53,7 +55,7 @@ def fhpd(square):
     for direction, neighbor in enumerate(game_map.neighbors(square)):
         t = 0
         current = square
-        for x in range(5):
+        for x in range(7):
             t += game_map.get_target(current, direction).production
             current = game_map.get_target(current, direction)
         if t > h and neighbor.strength < square.strength * 1.3 and (neighbor.owner != myID or game_map.get_target(neighbor, direction).owner != myID):
@@ -227,38 +229,54 @@ def fhp(square):
 ##    return NORTH
 
 
+#This finds the highest production in a particular direction however its decision-making is weighted based on strength and friendly strength and enemy strength.
+def fhwpd(square):
+    h = 0
+    d = STILL
 
-    
+    for direction, neighbor in enumerate(game_map.neighbors(square)):
+        t = 0
+        ds = 0
+        current = square
+        for x in range(7):
+            t += game_map.get_target(current, direction).production
+            ds += game_map.get_target(current, direction).strength
+            current = game_map.get_target(current, direction)
+        if t > h and ds < square.strength * 2.5 + nfs(square) + square.production * 7 and (neighbor.owner != myID or game_map.get_target(neighbor, direction).owner != myID):
+            h = t
+            d = direction
+
+    return d
+
+#This secondary function ensures that if assign_move returns a value which will result in a high loss of strength
+#or some other error, it will not do that.
+
+def assign_movec(square):
+    direction = assign_move(square)
+    target = game_map.get_target(square, direction)
+
+    #Check that merging won't cause a large loss. If it does, wait.
+    if target.owner == myID and target.strength + square.strength > 290:
+        return Move(square, STILL)
+
+    #Check that it's not trying to take a stronger square
+    if target.owner != myID and target.strength > square.strength:
+        return Move(square, STILL)
+
+    return Move(square, direction)
+
+
+#This only returns a direction, as it needs to be checked by the check function
 def assign_move(square):
-
-    #Move away from stronger enemies, and move towards weaker enemies. 
-    if fne(square) != 12 and ne(square) > 3:
-        #If weak, remain still
-        if square.strength < square.production * 5:
-            return Move(square, STILL)
-        if nfs(square) < nes(square):
-            return Move(square, hlt.opposite_cardinal(fne(square)))
-        else:
-            return Move(square, fne(square))
-
-    #If it is being attacked, i.e. has many enemies nearby, just attack
-    if ne(square) > 4 and square.strength > square.production * 5:
-        if fne(square) == 12:
-            return Move(square, fnb(square))
-        else:
-            return Move(square, fne(square))
-        
-    total = 0
-    #Full strength squares should head to nearest border
+      #Full strength squares should head to nearest border
     if square.strength == 255:
         if fne(square) == 12:
-            return Move(square, fnb(square))
+            return fnb(square)
         else:
-            return Move(square, fne(square))
+            return fne(square)
 
-
-
-    #Go through all neighbours
+    total = 0
+     #Go through all neighbours
     for direction, neighbor in enumerate(game_map.neighbors(square)):
        
         c = True
@@ -266,11 +284,6 @@ def assign_move(square):
         if neighbor.owner != myID:
             #The square is not surrounded by its own team
             c = False
-            
-##        if neighbor.owner != myID and neighbor.strength < square.strength:
-##            #If it is next to a square of an enemy, and it is stronger, it will take it
-##            
-##            return Move(square, direction)
         
         #If it is next to a friendly neighbour and they are both relatively weak, try merge
         if neighbor.owner == myID and (square.strength < 50 and square.strength > 10) and (neighbor.strength < 50 and neighbor.strength > square.production):
@@ -281,50 +294,77 @@ def assign_move(square):
 
             else:
                 if square.production < neighbor.production:
-                    return Move(square, direction)
+                    return direction
                 elif square.production == neighbor.production:
                     if random.randint(0, 1) == 1:
-                        return Move(square, direction)
+                        return direction
                     else:
-                        return Move(square, STILL)
+                        return STILL
                 else:
-                    return Move(square, STILL)
+                    return STILL
 
   
+    #If low on territory and high strength and at a border, move towards areas of high production
+    if territory < 40 and square.strength > square.production * 4 and c == False:
+        return fhwpd(square)
+    
+    #If low on territory and has medium strength, just go to nearest border (assuming it can take it)
+    if territory < 40 and square.strength > square.production * 5:
+        if dt(square) != True:
+            return fwe(square)
+        else:
+            return fnb(square)
+        
+    #Move away from stronger enemies, and move towards weaker enemies. 
+    if fne(square) != 12 and ne(square) > 3:
+        #If weak, remain still
+        if square.strength < square.production * 5:
+            return STILL
+        if nfs(square) < nes(square):
+            return hlt.opposite_cardinal(fne(square))
+        else:
+            return fne(square)
+
+    #If it is being attacked, i.e. has many enemies nearby, just attack
+    if ne(square) > 4 and square.strength > square.production * 5:
+        if fne(square) == 12:
+            return fnb(square)
+        else:
+            return fne(square)
+
+
+   
                 
     #Otherwise if the square is in its territory and quite strong, move towards nearest enemy preferably, or near border
     if c == True and square.strength > 40 and territory > 30:
         if fne(square) == 12:
-            return Move(square, fnb(square))
+            return fnb(square)
         else:
-            return Move(square, fne(square))
+            return fne(square)
         
 
 
     #If it is surrounded by weak neighbors of its own type, then stay still
     if c == True and total < square.production * 12 and square.strength < 200:
-        return Move(square, STILL)
+        return STILL
 
     
-    #If low on territory and high strength and at a border, move towards areas of high production
-    if territory < 30 and square.strength > square.production * 4 and c == False:
-        return Move(square, fhpd(square))
-    
-    #If low on territory and has medium strength, just go to nearest border (assuming it can take it)
-    if territory < 30 and square.strength > square.production * 5:
-        return Move(square, fne(square))
+
+        
 
     
     #If it is next to an enemy, take the weakest enemy
     if c == False:
-        return Move(square, fwe(square))
+        return fwe(square)
     
 
 
         
 
-    #If the square is weak, stay still
-    return Move(square, STILL)
+    #Default just stay still
+    return STILL
+
+
 frame = 0
 territory = 0
 enemies = 0
@@ -341,5 +381,5 @@ while True:
                 if neighbor.owner != myID and neighbor.owner != 0:
                     enemies += 1
             
-    moves = [assign_move(square) for square in game_map if square.owner == myID]
+    moves = [assign_movec(square) for square in game_map if square.owner == myID]
     hlt.send_frame(moves)
